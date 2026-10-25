@@ -12,7 +12,7 @@ Eure Architektur ist im Kern sinnvoll. Fuenf Punkte wuerde ich aendern:
 2. **BroadTrack nicht als Baustein einplanen.** Das Repository ist gefunden (`playbox-dev/BroadTrack`), aber die Lizenz ist eine proprietaere EVS-Lizenz: nur nichtkommerzielle interne Forschung, keine Weitergabe, eure Aenderungen gehoeren EVS, Vertraulichkeitspflicht. Fuer ein Uni-Repo auf GitHub ist das ungeeignet. Ersatz: **PnLCalib** (GPL-2.0, Gewichte verfuegbar, 2026 in CVIU erschienen) oder **TVCalib** (MIT).
 3. **Tracker-Vergleich auf gecachten Detektionen und gegen Ground Truth.** Erst einmal detektieren, Detektionen speichern, dann ByteTrack und BoT-SORT auf exakt denselben Boxen laufen lassen und mit HOTA/IDF1/ID-Switches gegen eine SoccerNet-Szene mit Annotationen messen. Eine beliebige TV-Szene ohne Ground Truth erlaubt nur Augenmass.
 4. **Fehlender Baustein: Team- und Rollenzuordnung.** Ohne "wer gehoert zu welchem Team" und "wer ist in der Viererkette" gibt es keine Viererketten-Merkmale. Das muss als eigenes Modul in den Plan.
-5. **Zeitfenster vereinheitlichen.** In `handoff.md` steht "innerhalb der naechsten drei Sekunden", im Projektkontext "innerhalb der folgenden sieben Sekunden". Bitte eine Zahl festlegen (Vorschlag unten).
+5. **Zeitfenster festgelegt: 7 Sekunden** (Entscheidung des Teams am 25.10.2026). Fokus des gesamten Projekts ist die **Viererkette**; Szenen gegen Dreier- oder Fuenferketten werden ausgefiltert (siehe Abschnitt Labeling).
 
 YOLO + BoT-SORT/ByteTrack als Startpunkt bleibt richtig. Achtet aber darauf, dass Ultralytics inzwischen **TrackTrack** als Standard-Tracker nutzt; wer `tracker=` nicht explizit setzt, vergleicht etwas anderes als geplant.
 
@@ -127,7 +127,8 @@ Weitere offene Trackingdaten:
 **Empfehlung:**
 - Schritt 1: Teamzuordnung pro Track (nicht pro Frame) per Clustering der Trikotfarbe oder SigLIP-Embeddings, Mehrheitsentscheidung ueber den Track.
 - Schritt 2: Schiedsrichter und Torhueter ueber Detektorklasse ausschliessen.
-- Schritt 3: Viererkette pro Frame heuristisch bestimmen: die vier hintersten Feldspieler des verteidigenden Teams (in Spielfeldkoordinaten, Spielrichtung normiert). Mit Glaettung ueber die Zeit, damit die Zuordnung nicht flackert. Ob das bei Dreier- oder Fuenferkette funktioniert, solltet ihr explizit als Einschraenkung dokumentieren.
+- Schritt 3 (Video, Spur A): Viererkette pro Frame heuristisch bestimmen: die vier hintersten Feldspieler des verteidigenden Teams (in Spielfeldkoordinaten, Spielrichtung normiert). Mit Glaettung ueber die Zeit, damit die Zuordnung nicht flackert.
+- Schritt 3 (Daten, Spur B), **Fakt** aus SkillCorner Spiel 2017461: Die `match.json` enthaelt pro Spieler eine Rolle (`player_role.acronym`, z. B. `LB`, `LCB`, `RCB`, `RB`, `CB`, `LWB`), und die Dynamic Events haben pro Ereignis die Spalte `defensive_structure` mit der Formation des verteidigenden Teams (in diesem Spiel u. a. `442` 468x, `424` 154x, `433` 82x, `4231` 71x, aber auch `541` 130x, `532` 86x, `523` 67x). **Empfehlung:** Viererkette = die Spieler mit Rolle LB, LCB, RCB, RB (bzw. CB) laut Aufstellung, abgeglichen mit den vier hintersten Feldspielern im Tracking; Wechsel und Rollentausch ueber die Zeit beruecksichtigen. Nur Situationen verwenden, in denen `defensive_structure` mit `4` beginnt. So ist das Modell klar auf die Viererkette zugeschnitten und vermischt nicht Dreier- und Fuenferketten.
 
 ### Ball
 
@@ -151,9 +152,11 @@ Weitere offene Trackingdaten:
 
 **Empfehlung (konkreter Vorschlag fuer Version 1):**
 - Zeitpunkt t ist ein Stichprobenpunkt waehrend gegnerischen Ballbesitzes.
-- Eingabe: Positionen und Geschwindigkeiten im Fenster [t - 3 s, t].
-- Label 1, wenn im Fenster (t, t + H] ein Lauf hinter die Abwehr (`off_ball_run`, Subtyp `behind`) beginnt, der **die letzte Linie bricht** (`break_defensive_line`) **oder** angespielt wird (`received`) **oder** zu einem Schuss fuehrt (`lead_to_shot`). Sonst 0.
-- H: Ich empfehle mit **H = 5 s** zu starten und 3 s sowie 7 s als Sensitivitaetsanalyse zu berichten. Kuerzere Horizonte sind schwieriger, laengere vermischen Ursache und Zufall.
+- Eingabe: Positionen und Geschwindigkeiten der vier Kettenspieler, der relevanten Angreifer und (falls vorhanden) des Balls im Fenster [t - 3 s, t].
+- Nur Zeitpunkte, an denen das verteidigende Team mit Viererkette steht (`defensive_structure` beginnt mit `4`) und die vier Kettenspieler auf dem Platz sind.
+- Label 1, wenn im Fenster (t, t + 7 s] ein Lauf hinter die Viererkette (`off_ball_run`, Subtyp `behind`) beginnt, der **die letzte Linie bricht** (`break_defensive_line`) **oder** angespielt wird (`received`) **oder** zu einem Schuss fuehrt (`lead_to_shot`). Sonst 0.
+- H = **7 s** (festgelegt). 3 s und 5 s koennen als Sensitivitaetsanalyse berichtet werden. Hypothese: Bei 7 s passiert im Fenster viel, das zum Zeitpunkt t noch nicht angelegt ist (z. B. ein Ballgewinn); die Precision wird daher niedriger ausfallen, das ist erwartbar.
+- Gegen Leckage: Stichprobenpunkte mit mindestens 1 s Abstand, Split immer nach Spielen.
 - Zusaetzlich eine eigene, geometrische Definition (z. B. Angreifer mit Ball oder ballnah hinter der letzten Linie, im Zentrum, innerhalb von x Metern vom Tor) implementieren und gegen die SkillCorner-Labels abgleichen. Dann habt ihr eine Definition, die ihr auch auf eure eigenen Videodaten anwenden koennt.
 - Aus dem einen ausgewerteten Spiel: 29 Laeufe hinter die Abwehr, davon 6 mit Linienbruch und 7 mit Schuss. Ueber 10 Spiele also grob einige Dutzend bis gut hundert positive Ereignisse. Rechnet mit starker Klassenungleichheit.
 
@@ -192,7 +195,7 @@ Weitere offene Trackingdaten:
 | Team/Rolle | fehlt | **neu** | ohne sie keine Viererkette |
 | Ball | optional | **behalten optional** | im Prototyp nicht kritisch |
 | Merkmale | explizit | **behalten**, erweitern | gegen SkillCorner pruefbar |
-| Labels | Lauf hinter Abwehr | **behalten**, an SkillCorner-Events koppeln, H festlegen | nachvollziehbar, pruefbar |
+| Labels | Lauf hinter Abwehr | **behalten**, an SkillCorner-Events koppeln, H = 7 s, nur Viererketten-Szenen | nachvollziehbar, pruefbar |
 | Modelle | Regel, MLP, GRU/LSTM, GNN | **behalten**, LogReg/GBM-Baseline ergaenzen | ehrlicher Vergleich |
 | Evaluation | P/R/F1, Spiel-Split | **behalten**, PR-AUC, Fehlalarme/10 min, Vorwarnzeit | passt zum Ziel "frueh" |
 
@@ -246,10 +249,9 @@ docs/
 
 ## 5. Offene Fragen an euch
 
-1. Zeithorizont H: 3 s, 5 s oder 7 s? (Vorschlag: 5 s, die anderen als Sensitivitaet.)
-2. Einverstanden mit der Zwei-Spuren-Aufteilung und SkillCorner als Datengrundlage fuer das Modell?
-3. Habt ihr Zugang zu einer GPU (Uni-Cluster, Colab)?
-4. Soll ich Phase 1 (Schritte 1-6 oben) im Repo implementieren?
+1. Einverstanden mit der Zwei-Spuren-Aufteilung und SkillCorner als Datengrundlage fuer das Modell?
+2. Habt ihr Zugang zu einer GPU (Uni-Cluster, Colab)?
+3. Soll ich Phase 1 (Schritte 1-6 oben) im Repo implementieren?
 
 ---
 

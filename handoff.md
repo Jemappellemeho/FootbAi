@@ -2,7 +2,7 @@
 
 ## Goal
 
-Develop a deep-learning system that analyzes the defensive positioning of a football back four and predicts whether a dangerous attacking situation is likely to occur within the next three seconds.
+Develop a deep-learning system that analyzes the defensive positioning of a football back four and predicts whether a dangerous attacking situation is likely to occur within the next seven seconds.
 
 The initial goal is **risk prediction**, not finding a universally perfect defensive formation.
 
@@ -22,7 +22,7 @@ The initial goal is **risk prediction**, not finding a universally perfect defen
 3. **Create training examples and labels**
    - Use a short history window (initially around three seconds) as the model input.
    - Define a measurable dangerous event, such as an attacker entering a predefined space behind the defensive line.
-   - Label each example `1` if the event occurs within the following three seconds and `0` otherwise.
+   - Label each example `1` if the event occurs within the following seven seconds and `0` otherwise.
    - Review a sample of labels with football knowledge. Do not assume that a large gap automatically means a defensive mistake.
 
 4. **Train and compare models**
